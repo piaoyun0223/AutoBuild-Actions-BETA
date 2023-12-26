@@ -24,7 +24,10 @@ Firmware_Diy_Core() {
 	Regex_Skip="packages|buildinfo|sha256sums|manifest|kernel|rootfs|factory|itb|profile|ext4|json"
 	# 输出固件时丢弃包含该内容的固件/文件
 	AutoBuild_Features=true
-	# 自动添加 AutoBuild 固件特性, true: [开启]; false: [关闭]
+	# 添加 AutoBuild 固件特性, true: [开启]; false: [关闭]
+	
+	AutoBuild_Features_Patch=false
+	AutoBuild_Features_Kconfig=false
 }
 
 Firmware_Diy() {
@@ -61,17 +64,18 @@ then
 fi
 exit 0
 EOF
-		sed -i "s?/bin/login?/usr/libexec/login.sh?g" ${FEEDS_PKG}/ttyd/files/ttyd.config
+		# sed -i "s?/bin/login?/usr/libexec/login.sh?g" ${FEEDS_PKG}/ttyd/files/ttyd.config
 		# sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
 		# sed -i '/uci commit luci/i\uci set luci.main.mediaurlbase="/luci-static/argon-mod"' $(PKG_Finder d package default-settings)/files/zzz-default-settings
 
 		rm -r ${FEEDS_LUCI}/luci-theme-argon*
 		AddPackage git themes luci-theme-argon jerrykuku 18.06
-		AddPackage svn other luci-app-openclash vernesong/OpenClash/branches/dev
-		AddPackage git lean luci-app-argon-config jerrykuku master
+		AddPackage git other OpenClash vernesong dev
+		AddPackage git other luci-app-argon-config jerrykuku master
 		AddPackage git other helloworld fw876 main
 		AddPackage git themes luci-theme-neobird thinktip main
-
+		svn co https://github.com/immortalwrt/luci/branches/openwrt-18.06-k5.4/themes/luci-theme-bootstrap-mod ${FEEDS_LUCI}/luci-theme-bootstrap-mod
+		
 		case "${TARGET_BOARD}" in
 		ramips)
 			sed -i "/DEVICE_COMPAT_VERSION := 1.1/d" target/linux/ramips/image/mt7621.mk
@@ -87,19 +91,23 @@ EOF
 			Copy ${CustomFiles}/Depends/cpuset ${BASE_FILES}/bin
 			AddPackage git passwall-depends openwrt-passwall-packages xiaorouji main
 			AddPackage git passwall-luci openwrt-passwall xiaorouji main
-			AddPackage git passwall-luci2 openwrt-passwall2 xiaorouji main
-			rm -rf packages/lean/autocore
-			AddPackage git lean autocore-modify Hyy2001X master
+			AddPackage git passwall2-luci openwrt-passwall2 xiaorouji main
+			#rm -rf packages/lean/autocore
+			#AddPackage git lean autocore-modify Hyy2001X master
 			sed -i -- 's:/bin/ash:'/bin/bash':g' ${BASE_FILES}/etc/passwd
 			
 			singbox_version="1.7.2"
 			hysteria_version="2.2.2"
 			naiveproxy_version="119.0.6045.66-1"
 			
-			wget https://github.com/SagerNet/sing-box/releases/download/v${singbox_version}/sing-box-${singbox_version}-linux-amd64.tar.gz -P /tmp
-			wget https://github.com/apernet/hysteria/releases/download/app%2Fv${hysteria_version}/hysteria-linux-amd64 -P /tmp
-			wget https://github.com/klzgrad/naiveproxy/releases/download/v${naiveproxy_version}/naiveproxy-v${naiveproxy_version}-openwrt-x86_64.tar.xz -P /tmp
-			wget https://raw.githubusercontent.com/vernesong/OpenClash/core/master/dev/clash-linux-amd64.tar.gz -O /tmp/clash-dev.tar.gz
+			wget --quiet --no-check-certificate -P /tmp \
+				https://github.com/SagerNet/sing-box/releases/download/v${singbox_version}/sing-box-${singbox_version}-linux-amd64.tar.gz
+			wget --quiet --no-check-certificate -P /tmp \
+				https://github.com/apernet/hysteria/releases/download/app%2Fv${hysteria_version}/hysteria-linux-amd64
+			wget --quiet --no-check-certificate -P /tmp \
+				https://github.com/klzgrad/naiveproxy/releases/download/v${naiveproxy_version}/naiveproxy-v${naiveproxy_version}-openwrt-x86_64.tar.xz
+			wget --quiet --no-check-certificate -P /tmp \
+				https://raw.githubusercontent.com/vernesong/OpenClash/core/master/dev/clash-linux-amd64.tar.gz
 			
 			tar -xvzf /tmp/sing-box-${singbox_version}-linux-amd64.tar.gz -C /tmp
 			Copy /tmp/sing-box-${singbox_version}-linux-amd64/sing-box ${BASE_FILES}/usr/bin
@@ -109,8 +117,13 @@ EOF
 			tar -xvf /tmp/naiveproxy-v${naiveproxy_version}-openwrt-x86_64.tar.xz -C /tmp
 			Copy /tmp/naiveproxy-v${naiveproxy_version}-openwrt-x86_64/naive ${BASE_FILES}/usr/bin
 			
-			tar -xvzf /tmp/clash-dev.tar.gz -C /tmp
+			tar -xvzf /tmp/clash-linux-amd64.tar.gz -C /tmp
 			Copy /tmp/clash ${BASE_FILES}/etc/openclash/core
+			
+			chmod 777 ${BASE_FILES}/usr/bin/sing-box ${BASE_FILES}/usr/bin/hysteria ${BASE_FILES}/usr/bin/naive ${BASE_FILES}/etc/openclash/core
+			
+			ReleaseDL https://api.github.com/repos/Loyalsoldier/v2ray-rules-dat/releases/latest geosite.dat ${BASE_FILES}/usr/v2ray
+			ReleaseDL https://api.github.com/repos/Loyalsoldier/v2ray-rules-dat/releases/latest geoip.dat ${BASE_FILES}/usr/v2ray
 		;;
 		xiaomi_redmi-router-ax6s)
 			AddPackage git passwall-depends openwrt-passwall-packages xiaorouji main
@@ -119,7 +132,12 @@ EOF
 		esac
 	;;
 	immortalwrt/immortalwrt*)
-		sed -i "s?/bin/login?/usr/libexec/login.sh?g" ${FEEDS_PKG}/ttyd/files/ttyd.config
+		case "${TARGET_PROFILE}" in
+		x86_64)
+			AddPackage git passwall2-luci openwrt-passwall2 xiaorouji main
+		;;
+		esac
+		# sed -i "s?/bin/login?/usr/libexec/login.sh?g" ${FEEDS_PKG}/ttyd/files/ttyd.config
 	;;
 	esac
 }
